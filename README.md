@@ -1,7 +1,7 @@
 # Ashley Bot
 Ashley Bot，艾希 Bot。   
 基于 AliceBot、 Mirai 框架和 OpenAI API 实现的 QQ 智能群聊机器人。擅长作为可爱的猫娘和大家互动。  
-**Warning: Ashley bot is still under heavy development. Some feature may be changed in future version.**
+> **Warning**: Ashley bot is still under heavy development. Some feature may be changed in future version.
 
 ## How To Use
 

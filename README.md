@@ -8,3 +8,7 @@ TODO: 补充requirements
 依赖环境安装结束后，请重命名`config.toml.example`为`config.toml`，重命名`config.yaml.example`为`config.yaml`，并按照提示或阅读详细说明修改其中配置。
 
 TODO: 补充详细说明
+
+## More
+
+Ashley的名字来源于AI自己。她很高兴称呼自己为Ashley。我们也很高兴。

@@ -47,11 +47,11 @@ $ python main.py
 Ashley 的名字来源于 AI 自己。她很高兴称呼自己为 Ashley 。我们也很高兴。
 
 ## Thanks
-- [AliceBot]()
+- [AliceBot](https://github.com/AliceBotProject/alicebot)
 
-- [Mirai]()
+- [mirai](https://github.com/mamoe/mirai)
 
-- [mirai-console-loader]()
+- [mirai-console-loader](https://github.com/iTXTech/mirai-console-loader)
 
-- [mirai-http-api]()
-- [openai]()
+- [mirai-http-api](https://github.com/project-mirai/mirai-api-http)
+- [openai-python](https://github.com/openai/openai-python)

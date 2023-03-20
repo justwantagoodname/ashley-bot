@@ -1,0 +1,15 @@
+[bot]
+# 这里是 AliceBot 自身的配置
+# plugins = []
+plugin_dirs = ["plugins"]
+adapters = ["alicebot.adapter.mirai"]
+
+[bot.log]
+# 这里是 AliceBot 自身日志相关的配置
+level = "INFO"
+verbose_exception = true
+
+[adapter.mirai]
+adapter_type = "ws"
+verify_key = "your-ws-verify-key"
+qq = "your-bot-qq"

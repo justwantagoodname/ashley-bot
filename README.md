@@ -26,6 +26,12 @@ $ python -m venv venv # You should create a virtualenv first. :-)
 $ pip install -r requirements.txt
 ```
 
+#### 设置 OpenAI API Key
+
+请根据所使用的操作系统，设置`OPENAI_API_KEY`环境变量并确保可以读取它。
+
+这个变量的值应该是你的 API Key，请前往 [platform.openai.com](platform.openai.com) 在 Account 中生成一个或者使用已有的。
+
 #### 修改配置
 
 依赖环境安装结束后，请重命名`config.toml.example`为`config.toml`，重命名`config.yaml.example`为`config.yaml`，并按照提示或阅读详细说明修改其中配置。

@@ -8,9 +8,7 @@ from aiohttp import ClientSession
 from aiohttp_proxy import ProxyConnector, ProxyType
 from alicebot import Plugin
 from alicebot.adapter.mirai.message import MiraiMessageSegment
-
-from plugins.ChatGPT.main import fromMirai, isBotCalled, isWorkingGroup
-
+from plugins.ChatGPT.utils import fromMirai, isBotCalled, isWorkingGroup
 from plugins.ChatGPT.config import config
 
 bots = {}
@@ -148,7 +146,6 @@ class ChatBotCtrlPlugin(Plugin):
     block = True
 
     def __init__(self, event):
-        print('[log] Initial of ChatBotCtrlPlugin is running')
         super().__init__(event)
         self.arg = None
         self.command_list = {

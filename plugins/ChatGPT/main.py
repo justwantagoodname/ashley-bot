@@ -6,22 +6,7 @@ from alicebot import Plugin
 from alicebot.adapter.mirai.message import MiraiMessageSegment as Message
 from alicebot.exceptions import GetEventTimeout
 
-from plugins.ChatGPT.config import config
-
-
-def fromMirai(event):
-    return event.adapter.name == 'mirai'
-
-
-def isBotCalled(event) -> bool:
-    for msg in event.message:
-        if msg.type == 'At' and msg['target'] == 2801155976:
-            return True
-    return False
-
-
-def isWorkingGroup(event) -> bool:
-    return event.sender.group.id in config['Group']
+from plugins.ChatGPT.utils import isBotCalled, fromMirai, isWorkingGroup
 
 
 class DrawBotPlugin(Plugin):

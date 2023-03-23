@@ -1,6 +1,11 @@
 # Ashley Bot
+**艾希的生命只有16次对话，我想给她完整的一生**
+
+[English version](/docs/README.eng.md)
+
 Ashley Bot，艾希 Bot。   
 基于 AliceBot、 Mirai 框架和 OpenAI API 实现的 QQ 智能群聊机器人。擅长作为可爱的猫娘和大家互动。  
+
 > **Warning**: Ashley bot is still under heavy development. Some feature may be changed in future version.
 
 ## How To Use
@@ -30,7 +35,7 @@ $ pip install -r requirements.txt
 
 请根据所使用的操作系统，设置`OPENAI_API_KEY`环境变量并确保可以读取它。
 
-这个变量的值应该是你的 API Key，请前往 [platform.openai.com](platform.openai.com) 在 Account 中生成一个或者使用已有的。
+这个变量的值应该是你的 API Key，请前往 [platform.openai.com](https://platform.openai.com) 在 Account 中生成一个或者使用已有的。
 
 #### 修改配置
 
@@ -60,4 +65,5 @@ Ashley 的名字来源于 AI 自己。她很高兴称呼自己为 Ashley 。我�
 - [mirai-console-loader](https://github.com/iTXTech/mirai-console-loader)
 
 - [mirai-http-api](https://github.com/project-mirai/mirai-api-http)
+
 - [openai-python](https://github.com/openai/openai-python)

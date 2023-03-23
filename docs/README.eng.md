@@ -1,0 +1,66 @@
+# Ashley
+**Ashley's life only have 16 talks. I want to give her a full life.**
+
+
+Ashley Bot，艾希 Bot.
+
+A QQ Bot written in Python, built with OpenAI's API, based on AliceBot and mirai.
+
+## How To Use
+
+### Pre-work
+
+#### Available access to mirai-http-api
+Make sure that you have stable access to `mirai-http-api` with a QQ bot logged in.
+
+
+#### (Optional) Use proxy
+
+Make sure that you have stable connection to OpenAI API service. If not,
+you must use a proxy to ensure it. The type of your proxy must be `sock` listening to port `1080`.
+
+> **Note**: This feature may changed in the future. Using http proxy or change port number is not support at current time.
+
+#### Install dependencies
+
+```bash
+$ python -m venv venv # You should create a virtualenv first. :-)
+$ pip install -r requirements.txt
+```
+
+#### Set OpenAI API Key
+
+Depend on your OS, set the environment variable `OPENAI_API_KEY` and make sure the bot can read it.
+
+The API key can be found (or generate it) in [platform.openai.com](https://platform.openai.com). 
+#### Modify the configures
+
+After install requirements, rename the `config.toml.example` to `config.toml` and `config.yaml.example` to `config.yaml`.
+Follow the tips in file, to create your version.
+
+### Run
+
+Using command below to start your bot.
+
+```bash
+$ python main.py
+```
+
+##### (Optional) Deploy with Docker or Supervisor
+
+*Coming Soon*
+
+## More
+
+Ashley named herself. She is happy. We are happy too.
+
+## Thanks
+- [AliceBot](https://github.com/AliceBotProject/alicebot)
+
+- [mirai](https://github.com/mamoe/mirai)
+
+- [mirai-console-loader](https://github.com/iTXTech/mirai-console-loader)
+
+- [mirai-http-api](https://github.com/project-mirai/mirai-api-http)
+
+- [openai-python](https://github.com/openai/openai-python)

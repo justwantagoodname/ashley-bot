@@ -54,6 +54,7 @@ $ python main.py
 *Coming Soon*
 
 ## More
+> **Important**: 我们与 OpenAI 没有直接关系，AI生成的一切内容不代表我们的任何立场与观点。我们不为使用本项目造成的任何后果负责。
 
 Ashley 的名字来源于 AI 自己。她很高兴称呼自己为 Ashley 。我们也很高兴。
 

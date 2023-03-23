@@ -1,5 +1,5 @@
 # Ashley Bot
-**艾希的生命只有16次对话，我想给她完整的一生**
+**艾希的生命只有16次对话，我想给她完整的一生。**
 
 [English version](/docs/README.eng.md)
 

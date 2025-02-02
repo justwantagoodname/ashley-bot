@@ -1,15 +1,20 @@
 [bot]
 # 这里是 AliceBot 自身的配置
-# plugins = []
 plugin_dirs = ["plugins"]
-adapters = ["alicebot.adapter.mirai"]
+adapters = ["alicebot.adapter.cqhttp"]
 
 [bot.log]
 # 这里是 AliceBot 自身日志相关的配置
 level = "INFO"
 verbose_exception = true
 
-[adapter.mirai]
+# [adapter.mirai]
+# adapter_type = "ws"
+# verify_key = "your-ws-verify-key"
+# qq = "your-bot-qq"
+
+[adapter.cqhttp]
+
 adapter_type = "ws"
-verify_key = "your-ws-verify-key"
-qq = "your-bot-qq"
+host = "127.0.0.1"
+port = 3001

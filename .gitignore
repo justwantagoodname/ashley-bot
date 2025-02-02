@@ -3,3 +3,4 @@ config.toml
 venv/
 .idea/
 __pycache__/
+db.json

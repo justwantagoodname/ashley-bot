@@ -1,0 +1,4 @@
+{
+    "nixEnvSelector.nixFile": "${workspaceFolder}/default.nix",
+    "python.analysis.autoImportCompletions": true
+}

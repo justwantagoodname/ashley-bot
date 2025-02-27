@@ -1,4 +1,8 @@
 import asyncio
+import json
+import re
+from alicebot.adapter.cqhttp.message import CQHTTPMessageSegment
+import structlog
 import time
 import base64
 from typing import Annotated
@@ -9,6 +13,8 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+logger = structlog.stdlib.get_logger()
 
 def DSR1CoTParser(output: str):
     start_idx = output.find('<think>')
@@ -23,12 +29,23 @@ def DSR1CoTParser(output: str):
 
 class AshleyState(MessagesState):
     date: str
+    expression: str
 
 class AshleyAIGraph:
-    def __init__(self, model='deepseek-r1:1.5b', prompt=None, context_win=4096, **kwargs):
-        self.model = ChatOllama(model=model, num_ctx=context_win)
+    def __init__(self, model='deepseek-r1:1.5b',
+                        prompt=None,
+                        context_win=4096,
+                        base_url='http://localhost:11434',
+                        express_data={},
+                        config={},
+                        **kwargs):
+        self.model = ChatOllama(base_url=base_url, model=model, num_ctx=context_win, temperature=0.6, keep_alive=-1)
         self.context_win = context_win
         self.prompt = prompt
+        self.express_data: dict = express_data
+        self.allow_express = config.get('ChatExpress', default=True) # 允许LLM使用的表情
+        # 将express_data的key和value互换
+        self.express_id = {v: k for k, v in self.express_data.items()}
         self.chat_statics = dict()
 
         self.prompt_template = self.build_propmpt_template(prompt)
@@ -50,23 +67,29 @@ class AshleyAIGraph:
     def build_ai_workflow(self):
         workflow = StateGraph(state_schema=AshleyState)
         
-        workflow.add_node('current_date', self.current_date)
+        workflow.add_node('chat_info', self.chat_info)
         workflow.add_node('model', self.call_model)
         workflow.add_node('auto_continue', self.auto_continue)
         
-        workflow.add_edge(START, 'current_date')
-        workflow.add_edge('current_date', 'model')
+        workflow.add_edge(START, 'chat_info')
+        workflow.add_edge('chat_info', 'model')
         workflow.add_edge('model', END)
 
         return workflow
 
-    async def current_date(self, state: AshleyState) -> str:
-        return {'date': time.strftime('%Y-%m-%d %A')}
+    async def chat_info(self, state: AshleyState):
+        expression = ' '.join([f'::{e}::' for e in self.allow_express.values()])
+        return {'date': time.strftime('%Y-%m-%d %A'),
+                'expression': expression
+            }
 
     async def call_model(self, state: AshleyState) -> AIMessage:
         prompt = self.prompt_template.invoke(state)
         response = await self.model.ainvoke(prompt)
-        think, response.content = DSR1CoTParser(response.content)
+
+        if '<think>' in response.content:
+            think, response.content = DSR1CoTParser(response.content)
+
         return {'messages': response}
     
     async def auto_continue(self, state: AshleyState) -> bool:
@@ -75,15 +98,59 @@ class AshleyAIGraph:
             return False
         elif state.messages[-1].response_metadata['done_reason'] != 'stop':
             return True
+        
+    def get_plain_text_for_model(self, event: MessageEvent):
+        '''
+        格式化消息中的文本和表情(替换为emoji)
+        '''
+        plain_msg_content = []
+        for msg in event.message:
+            if msg.type == 'text':
+                plain_msg_content.append(msg.data['text'])
+            if msg.type == 'face':
+                if int(msg.data['id']) in self.express_data:
+                    plain_msg_content.append(f'::{self.express_data[int(msg.data['id'])].strip()}::')
+                else:
+                    logger.warning(f'Unknown face id: {msg.data["id"]}')
+        return ''.join(plain_msg_content).strip()
+    
+    def gen_message_from_plain_text(self, text):
+        '''
+        用于onebot回应的消息链
+        '''
+        # 将消息按照::文本:: 进行分割
+        messages = CQHTTPMessageSegment.text('')
+        for msg in re.split(r'(::.*?::)', text):
+            if msg.startswith('::') and msg.endswith('::'):
+                face_name = msg[2:-2]
+                # 表情
+                if face_name in self.express_id:
+                    messages += CQHTTPMessageSegment.face(self.express_id[face_name])
+                else:
+                    logger.warning(f'Model use a unknown face name: {face_name}')
+            else:
+                # 文本
+                messages += CQHTTPMessageSegment.text(msg)
+
+        return messages
 
     async def chat(self, event: MessageEvent=None, chat_session='main'):
+        self.get_plain_text_for_model(event)
         config = {"configurable": {"thread_id": chat_session}}
-        input_message = [HumanMessage(f'<name>{event.sender.card}</name><msg>{event.get_plain_text()}</msg>')]
+        content = '{"name": "'+ \
+                    event.sender.card + \
+                    '", "msg": "' + \
+                    self.get_plain_text_for_model(event) + '"}'
+
+        input_message = [HumanMessage(content)]
 
         output = await self.ai.ainvoke({'messages': input_message}, config=config)
         result = output['messages'][-1]
         self.chat_statics[chat_session] = result.usage_metadata['total_tokens']
-        await event.reply(result.content)
+
+        # 替换其中的QQ表情
+        reply_message = self.gen_message_from_plain_text(result.content)
+        await event.reply(reply_message)
 
     async def get_token_usage(self, event: MessageEvent=None, chat_session='main'):
         cur = self.chat_statics.get(chat_session, 0)
@@ -96,7 +163,7 @@ Debug codes.
 '''
 
 async def run_app(input_message):
-    model = ChatOllama(model="deepseek-r1:1.5b")
+    model = ChatOllama(base_url='http://192.168.218.101:11434', model="deepseek-r1:1.5b")
 
     workflow = StateGraph(state_schema=MessagesState)
 
@@ -110,18 +177,17 @@ async def run_app(input_message):
         ]
     )
 
-    workflow.add_edge(START, 'model')
-    workflow.add_node('model', call_model)
-
-    memory = MemorySaver()
-    app = workflow.compile(checkpointer=memory)
-
-
     async def call_model(state: MessagesState) -> AIMessage:
         prompt = prompt_template.invoke(state)
         response = await model.ainvoke(prompt)
         think, response.content = DSR1CoTParser(response.content)
         return {'messages': response}
+
+    workflow.add_edge(START, 'model')
+    workflow.add_node('model', call_model)
+
+    memory = MemorySaver()
+    app = workflow.compile(checkpointer=memory)
     
     config = {"configurable": {"thread_id": "abc123"}}
     input_message = [HumanMessage(input_message)]

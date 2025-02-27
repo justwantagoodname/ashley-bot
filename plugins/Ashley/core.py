@@ -1,3 +1,4 @@
+from math import exp
 from termios import CQUIT
 from alicebot import MessageEvent, Plugin
 from alicebot.adapter.cqhttp.message import CQHTTPMessageSegment
@@ -21,8 +22,11 @@ class Ashley:
         self.group_chat_session = dict() # group_id to uuid
 
         self.ai = AshleyAIGraph(
+            config=self.config,
             model=self.config.Ashley['Parameters']['model'],
             prompt=self.config.Ashley['Prompt'],
+            base_url=self.config.Ashley['Parameters']['base_url'],
+            express_data=self.config.Express 
         )
 
     async def has_pemission(self, action, **kwargs) -> bool:

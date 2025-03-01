@@ -18,8 +18,10 @@ logger = structlog.stdlib.get_logger()
 class GroupChatSession:
     group_id: str
     group_thread_id: str # 对话主题ID，可用于合并群聊
+    last_active_event: Event # 上次新的事件
     last_trigger_msg: MessageEvent # 上册触发对话的消息事件
     last_active_msg: MessageEvent # 上次有新消息的消息事件
+    messages_digest: str # 上次回复至当前的对话摘要
     avg_msg_interval: float  # 由每次新对话间隔加权计算的平均消息间隔(秒)
 
     def update_avg_msg_interval(self, current_event_time: int, alpha: float):
@@ -65,6 +67,8 @@ class Ashley:
                 group_thread_id='main',
                 last_trigger_msg=None,
                 last_active_msg=None,
+                last_active_event=None,
+                messages_digest='',
                 avg_msg_interval=float('inf')
             )
             return self.group_chat_session[group_id]
@@ -183,11 +187,17 @@ Misc: BAT: {round(psutil.sensors_battery().percent, 2)}% Temp: {temp}'''
         msg = CQHTTPMessageSegment.image(url)
         await event.reply(msg)
 
+    async def update_group_chat_session(self, event: Event):
+        group_session = self.get_group_chat_session(event.group_id)
+        group_session.update_avg_msg_interval(event.time, self.group_active_time_beta)
+        group_session.last_active_event = event
+
     async def group_should_answer(self, **kwargs) -> bool:
         """判断群聊消息是否应该回复"""
         event: MessageEvent = kwargs['event']
+
+        await self.update_group_chat_session(event)
         group_session = self.get_group_chat_session(event.group_id)
-        group_session.update_avg_msg_interval(event.time, self.group_active_time_beta)
         is_trigger = False
         logger.info(f'group_should_answer {group_session} event {event} {event.time}')
 
@@ -207,15 +217,15 @@ Misc: BAT: {round(psutil.sensors_battery().percent, 2)}% Temp: {temp}'''
             return True
         else:
             group_session.last_active_msg = event
-            self.update_group_chat_session_digest(event, group_session)
+            await self.update_group_chat_session_digest(event, group_session)
             return False
         
     async def update_group_chat_session_digest(self, new_event: MessageEvent, group_session: GroupChatSession):
-        pass
+        return await self.ai_helper.generate_digest(group_session.messages_digest, new_event)
 
     async def do_group_chat(self, event: MessageEvent=None):
         """实际对话信息，调用 langgraph"""
-        await self.ai.chat(event=event)
+        await self.ai.chat(event=event, chat_session=self.get_group_chat_session(event.group_id))
 
 
 @dataclass
@@ -239,6 +249,7 @@ class AshleyAppPlugin(Plugin):
 
         if isNoticeEvent(self.event):
             if isPokeNotify(self.event):
+                self.bot.ashley.update_group_chat_session(self.event)
                 self.event.sender = CustomSender(user_id=self.event.user_id,
                                                  card='SystemMessage')
                 self.event.message = self.generate_message_from_poke(self.event)

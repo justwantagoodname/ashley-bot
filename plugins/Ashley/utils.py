@@ -1,6 +1,9 @@
 import asyncio
+import time
 from alicebot import MessageEvent, Event
 
+def formatTime(unixtime: int) -> str:
+    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(unixtime))
 
 def fromOneBot(event: Event) -> bool:
     return event.adapter.name == 'cqhttp'

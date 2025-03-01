@@ -15,8 +15,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-
-from plugins.Ashley.utils import isPokeNotify
+from plugins.Ashley.utils import formatTime, isPokeNotify
 
 logger = structlog.stdlib.get_logger()
 
@@ -43,7 +42,7 @@ class AshleyAIGraph:
                         express_data={},
                         config={},
                         **kwargs):
-        self.model = ChatOllama(base_url=base_url, model=model, num_ctx=context_win, temperature=0.6, keep_alive=-1)
+        self.model = ChatOllama(base_url=base_url, model=model, num_ctx=context_win, temperature=0.6)
         self.context_win = context_win
         self.prompt = prompt
         self.express_data: dict = express_data
@@ -142,11 +141,13 @@ class AshleyAIGraph:
         msg = CQHTTPMessageSegment.at(event.sender.user_id) + msg
         await event.adapter.send(msg, 'group', event.group_id)
 
-    async def chat(self, event: MessageEvent=None, chat_session='main'):
+    async def chat(self, event: MessageEvent=None, chat_session=None):
         self.get_plain_text_for_model(event)
-        config = {"configurable": {"thread_id": chat_session}}
+        config = {"configurable": {"thread_id": chat_session.group_thread_id}}
         content = '{"name": "'+ \
                     event.sender.card + \
+                    '", "send_time": "' + formatTime(event.time) + \
+                    ('", "chat_digest": "' + chat_session.messages_digest + '"') if chat_session.messages_digest != '' else '' + \
                     '", "msg": "' + \
                     self.get_plain_text_for_model(event) + '"}'
 
@@ -154,7 +155,9 @@ class AshleyAIGraph:
 
         output = await self.ai.ainvoke({'messages': input_message}, config=config)
         result = output['messages'][-1]
-        self.chat_statics[chat_session] = result.usage_metadata['total_tokens']
+
+        chat_session.messages_digest = ''
+        self.chat_statics[chat_session.group_thread_id] = result.usage_metadata['total_tokens']
 
         # 替换其中的QQ表情
         reply_message = self.gen_message_from_plain_text(result.content)
@@ -195,7 +198,19 @@ class AshleyAIHelper:
         return ('True' in response or 'true' in response)
     
     async def generate_digest(self, old_digest: str, event: MessageEvent):
-        pass
+        if old_digest.strip() == '':
+            old_digest = '无'
+        prompt = await self.digest_template.ainvoke({
+                                'last_digest': old_digest,
+                                'msg_sender': event.sender.card,
+                                'msg_content': event.message,
+                                'msg_time': formatTime(event.time)
+                                })
+        response = (await self.model.ainvoke(prompt)).content
+        if '<think>' in response:
+            think, response = DSR1CoTParser(response)
+        logger.info(f'AI Digest for "{response}"')
+        return response
 
 '''
 Debug codes.

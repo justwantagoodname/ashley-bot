@@ -1,13 +1,35 @@
-from math import exp
-from termios import CQUIT
+from dataclasses import dataclass
+import random
+import structlog
 from alicebot import MessageEvent, Plugin
 from alicebot.adapter.cqhttp.message import CQHTTPMessageSegment
 from langchain_core.messages import HumanMessage, AIMessage
-from plugins.Ashley.ai import AshleyAIGraph
+from plugins.Ashley.ai import AshleyAIGraph, AshleyAIHelper
 from plugins.Ashley.config import AshleyConfig
 from plugins.Ashley.utils import execute_method, fromOneBot, gather_method_with, isAtAll, isAtMe, isGroup, isPM
 import re
 import psutil
+
+
+logger = structlog.stdlib.get_logger()
+
+@dataclass
+class GroupChatSession:
+    group_id: str
+    group_thread_id: str # 对话主题ID，可用于合并群聊
+    last_trigger_msg: MessageEvent # 上册触发对话的消息事件
+    last_active_msg: MessageEvent # 上次有新消息的消息事件
+    avg_msg_interval: float  # 由每次新对话间隔加权计算的平均消息间隔(秒)
+
+    def update_avg_msg_interval(self, current_event_time: int, alpha: float):
+        if self.last_active_msg is None:
+            return
+        interval = current_event_time - self.last_active_msg.time
+        if self.avg_msg_interval == float('inf'):
+            self.avg_msg_interval = interval
+        else:
+            self.avg_msg_interval = (1 - alpha) * self.avg_msg_interval + alpha * interval
+
 
 # Ashley Core
 class Ashley:
@@ -28,6 +50,23 @@ class Ashley:
             base_url=self.config.Ashley['Parameters']['base_url'],
             express_data=self.config.Express 
         )
+        self.ai_helper = AshleyAIHelper(config=config)
+        self.group_active_time_beta = float(config.Ashley['group_active_beta'])
+        self.group_active_threshold = float(config.Ashley['group_active_threshold'])
+        self.group_active_engage = float(config.Ashley['group_active_engage'])
+
+    def get_group_chat_session(self, group_id: str) -> GroupChatSession:
+        if group_id in self.group_chat_session:
+            return self.group_chat_session[group_id]
+        else:
+            self.group_chat_session[group_id] = GroupChatSession(
+                group_id=group_id,
+                group_thread_id='main',
+                last_trigger_msg=None,
+                last_active_msg=None,
+                avg_msg_interval=float('inf')
+            )
+            return self.group_chat_session[group_id]
 
     async def has_pemission(self, action, **kwargs) -> bool:
         return await execute_method(self.permissions[action], kwargs)
@@ -145,9 +184,33 @@ Misc: BAT: {round(psutil.sensors_battery().percent, 2)}% Temp: {temp}'''
 
     async def group_should_answer(self, **kwargs) -> bool:
         """判断群聊消息是否应该回复"""
-        event = kwargs['event']
-        # TODO: support more complex rules
-        return isAtMe(event) or isAtAll(event)
+        event: MessageEvent = kwargs['event']
+        group_session = self.get_group_chat_session(event.group_id)
+        group_session.update_avg_msg_interval(event.time, self.group_active_time_beta)
+        is_trigger = False
+        logger.info(f'group_should_answer {group_session} event {event} {event.time}')
+
+        if isAtMe(event) or isAtAll(event): # 被 @ 直接回复
+            is_trigger = True
+        elif group_session.avg_msg_interval < self.group_active_threshold \
+                and random.random() < self.group_active_engage: # 群聊在活跃时以一定概率回复
+            is_trigger = True
+        elif False: # TODO 群聊在非活跃时以一定概率回复
+            pass
+        elif await self.ai_helper.is_arouse(event.get_plain_text()):  # 使用小模型panduan
+            is_trigger = True
+
+        if is_trigger:
+            group_session.last_trigger_msg = event
+            group_session.last_active_msg = event
+            return True
+        else:
+            group_session.last_active_msg = event
+            self.update_group_chat_session_digest(event, group_session)
+            return False
+        
+    async def update_group_chat_session_digest(self, new_event: MessageEvent, group_session: GroupChatSession):
+        pass
 
     async def do_group_chat(self, event: MessageEvent=None):
         """实际对话信息，调用 langgraph"""

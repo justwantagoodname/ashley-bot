@@ -2,13 +2,15 @@ import asyncio
 import json
 import re
 from alicebot.adapter.cqhttp.message import CQHTTPMessageSegment
+from attr import dataclass
+from pydantic import BaseModel, Field
 import structlog
 import time
 import base64
 from typing import Annotated
 from alicebot import MessageEvent
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
+from langchain_ollama import ChatOllama, OllamaLLM
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import MemorySaver
@@ -158,6 +160,34 @@ class AshleyAIGraph:
         return f'max: {self.context_win} cur: {cur} {percent}%'
 
 
+class AshleyAIHelper:
+    '''
+    使用小模型来辅助大模型的AI
+    '''
+    def __init__(self, config=None):
+        model = config.Ashley['Helper']['model']
+        base_url = config.Ashley['Helper']['base_url']
+        
+        # 8K 上下文、温度0.6、cpu模式、常驻内存
+        self.model = ChatOllama(base_url=base_url, model=model, num_gpu=0,
+                                num_ctx=8192, temperature=0.6, keep_alive=-1)
+
+        self.arouse_template = ChatPromptTemplate.from_template(config.Ashley['Helper']['prompt'])
+
+        self.digest_template = ChatPromptTemplate.from_template(config.Ashley['Helper']['digest_prompt'])
+        # self.llm = self.model.with_structured_output(AshleyArouse)
+        
+    async def is_arouse(self, text: str):
+        prompt = await self.arouse_template.ainvoke({'input': text})
+        response = (await self.model.ainvoke(prompt)).content
+        if '<think>' in response:
+            think, response = DSR1CoTParser(response)
+        logger.info(f'AI Arouse Check for "{response}"')
+        return ('True' in response or 'true' in response)
+    
+    async def generate_digest(self, old_digest: str, event: MessageEvent):
+        pass
+
 '''
 Debug codes.
 '''
@@ -200,4 +230,6 @@ async def main():
     await run_app('你好，你记得我名字吗？')
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    # asyncio.run(main())
+    helper = AshleyAIHelper(base_url='http://192.168.228.101:11434')
+    print(helper.is_arouse('今天雾好大'))

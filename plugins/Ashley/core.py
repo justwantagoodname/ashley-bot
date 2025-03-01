@@ -1,12 +1,13 @@
 from dataclasses import dataclass
+from email import message
 import random
 import structlog
-from alicebot import MessageEvent, Plugin
-from alicebot.adapter.cqhttp.message import CQHTTPMessageSegment
+from alicebot import Event, MessageEvent, Plugin
+from alicebot.adapter.cqhttp.message import CQHTTPMessageSegment, CQHTTPMessage
 from langchain_core.messages import HumanMessage, AIMessage
 from plugins.Ashley.ai import AshleyAIGraph, AshleyAIHelper
 from plugins.Ashley.config import AshleyConfig
-from plugins.Ashley.utils import execute_method, fromOneBot, gather_method_with, isAtAll, isAtMe, isGroup, isPM
+from plugins.Ashley.utils import execute_method, fromOneBot, gather_method_with, isAtAll, isAtMe, isGroup, isMessageEvent, isNoticeEvent, isPM, isPokeMe, isPokeNotify
 import re
 import psutil
 
@@ -216,21 +217,50 @@ Misc: BAT: {round(psutil.sensors_battery().percent, 2)}% Temp: {temp}'''
         """实际对话信息，调用 langgraph"""
         await self.ai.chat(event=event)
 
+
+@dataclass
+class CustomSender:
+    card: str
+    user_id: int
 class AshleyAppPlugin(Plugin):
     priority = 1
 
+    def generate_message_from_poke(self, event: Event):
+        poke_msg = ''
+        for msg in event.raw_info:
+            if 'txt' in msg:
+                poke_msg += msg['txt']
+        
+        return CQHTTPMessage(CQHTTPMessageSegment.text(f'有人{poke_msg}了你'))
+
     async def handle(self):
-        await self.bot.ashley.do_group_chat(event=self.event)
+        if isMessageEvent(self.event):
+            await self.bot.ashley.do_group_chat(event=self.event)
+
+        if isNoticeEvent(self.event):
+            if isPokeNotify(self.event):
+                self.event.sender = CustomSender(user_id=self.event.user_id,
+                                                 card='SystemMessage')
+                self.event.message = self.generate_message_from_poke(self.event)
+                await self.bot.ashley.do_group_chat(event=self.event)
 
     async def rule(self) -> bool:
         if not fromOneBot(self.event):
             return False
         
-        if isPM(self.event):
-            return False # TODO
+        if isNoticeEvent(self.event):
+            if isPokeNotify(self.event) \
+                and isPokeMe(self.event) \
+                and await self.bot.ashley.has_pemission('group_chat', event=self.event):
+                return True
+
+        if isMessageEvent(self.event):
+            # 处理消息
+            if isPM(self.event):
+                return False # TODO 处理私聊
         
-        if isGroup(self.event) and await self.bot.ashley.has_pemission('group_chat', event=self.event):
-            return await self.bot.ashley.group_should_answer(event=self.event)
+            if isGroup(self.event) and await self.bot.ashley.has_pemission('group_chat', event=self.event):
+                return await self.bot.ashley.group_should_answer(event=self.event)
 
 class AshleyManagePlugin(Plugin):
     priority = 0
@@ -265,6 +295,9 @@ class AshleyManagePlugin(Plugin):
     
     async def rule(self) -> bool:
         if not fromOneBot(self.event):
+            return False
+        
+        if not isMessageEvent(self.event):
             return False
         
         if isPM(self.event):

@@ -1,9 +1,21 @@
 import asyncio
-from alicebot import MessageEvent
+from alicebot import MessageEvent, Event
 
 
-def fromOneBot(event):
+def fromOneBot(event: Event) -> bool:
     return event.adapter.name == 'cqhttp'
+
+def isMessageEvent(event: Event) -> bool:
+    return event.post_type == 'message'
+
+def isNoticeEvent(event: Event) -> bool:
+    return event.post_type == 'notice'
+
+def isPokeNotify(event: Event) -> bool:
+    return isNoticeEvent(event) and event.sub_type == 'poke'
+
+def isPokeMe(event: Event) -> bool:
+    return isPokeNotify(event) and event.target_id == event.self_id
 
 def isPM(event: MessageEvent) -> bool:
     return event.message_type == 'private'

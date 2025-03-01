@@ -16,6 +16,8 @@ from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
+from plugins.Ashley.utils import isPokeNotify
+
 logger = structlog.stdlib.get_logger()
 
 def DSR1CoTParser(output: str):
@@ -135,6 +137,10 @@ class AshleyAIGraph:
                 messages += CQHTTPMessageSegment.text(msg)
 
         return messages
+    
+    async def reply_poke(self, msg, event: MessageEvent=None):
+        msg = CQHTTPMessageSegment.at(event.sender.user_id) + msg
+        await event.adapter.send(msg, 'group', event.group_id)
 
     async def chat(self, event: MessageEvent=None, chat_session='main'):
         self.get_plain_text_for_model(event)
@@ -152,7 +158,10 @@ class AshleyAIGraph:
 
         # 替换其中的QQ表情
         reply_message = self.gen_message_from_plain_text(result.content)
-        await event.reply(reply_message)
+        if isPokeNotify(event):
+            await self.reply_poke(reply_message, event)
+        else:
+            await event.reply(reply_message)
 
     async def get_token_usage(self, event: MessageEvent=None, chat_session='main'):
         cur = self.chat_statics.get(chat_session, 0)

@@ -123,7 +123,8 @@ class AshleyAIGraph:
         '''
         # 将消息按照::文本:: 进行分割
         messages = CQHTTPMessageSegment.text('')
-        for msg in re.split(r'(::.*?::)', text):
+        split_text_segment = re.split(r'(::.*?::)', text)
+        for idx, msg in enumerate(split_text_segment):
             if msg.startswith('::') and msg.endswith('::'):
                 face_name = msg[2:-2]
                 # 表情
@@ -133,6 +134,10 @@ class AshleyAIGraph:
                     logger.warning(f'Model use a unknown face name: {face_name}')
             else:
                 # 文本
+                if idx == 0:
+                    msg = msg.lstrip()
+                if idx == len(split_text_segment) - 1:
+                    msg = msg.rstrip()
                 messages += CQHTTPMessageSegment.text(msg)
 
         return messages

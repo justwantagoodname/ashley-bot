@@ -1,9 +1,6 @@
-import asyncio
-import json
 import re
 from alicebot.adapter.cqhttp.message import CQHTTPMessageSegment
 from attr import dataclass
-from pydantic import BaseModel, Field
 import structlog
 import time
 import base64
@@ -15,7 +12,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from plugins.Ashley.utils import formatTime, isPokeNotify
+from plugins.Ashley.utils import convertToBase64, formatTime, isPokeNotify
 
 logger = structlog.stdlib.get_logger()
 
@@ -41,7 +38,9 @@ class AshleyAIGraph:
                         base_url='http://localhost:11434',
                         express_data={},
                         config={},
+                        helper=None,
                         **kwargs):
+        self.ai_helper = helper
         self.model = ChatOllama(base_url=base_url, model=model, num_ctx=context_win, temperature=0.6)
         self.context_win = context_win
         self.prompt = prompt
@@ -102,7 +101,7 @@ class AshleyAIGraph:
         elif state.messages[-1].response_metadata['done_reason'] != 'stop':
             return True
         
-    def get_plain_text_for_model(self, event: MessageEvent):
+    async def get_plain_text_for_model(self, event: MessageEvent):
         '''
         格式化消息中的文本和表情(替换为emoji)
         '''
@@ -115,6 +114,15 @@ class AshleyAIGraph:
                     plain_msg_content.append(f'::{self.express_data[int(msg.data['id'])].strip()}::')
                 else:
                     logger.warning(f'Unknown face id: {msg.data["id"]}')
+            if msg.type == 'image':
+                summary = msg.data['summary']
+                file = msg.data['file']
+                # logger.info(summary + file)
+                abs_path = (await event.adapter.get_image(file=file))['file']
+                logger.info(abs_path)
+                img_content = await self.ai_helper.generate_image_digest(abs_path)
+                plain_msg_content.append(f'[图片{summary}:alt={img_content}]')
+
         return ''.join(plain_msg_content).strip()
     
     def gen_message_from_plain_text(self, text):
@@ -147,14 +155,14 @@ class AshleyAIGraph:
         await event.adapter.send(msg, 'group', event.group_id)
 
     async def chat(self, event: MessageEvent=None, chat_session=None):
-        self.get_plain_text_for_model(event)
+        # await self.get_plain_text_for_model(event)
         config = {"configurable": {"thread_id": chat_session.group_thread_id}}
         content = '{"name": "'+ \
                     event.sender.card + \
                     '", "send_time": "' + formatTime(event.time) + \
                     ('", "chat_digest": "' + chat_session.messages_digest + '"') if chat_session.messages_digest != '' else '' + \
                     '", "msg": "' + \
-                    self.get_plain_text_for_model(event) + '"}'
+                    await self.get_plain_text_for_model(event) + '"}'
 
         input_message = [HumanMessage(content)]
 
@@ -188,10 +196,17 @@ class AshleyAIHelper:
         # 8K 上下文、温度0.6、cpu模式、常驻内存
         self.model = ChatOllama(base_url=base_url, model=model, num_gpu=0,
                                 num_ctx=8192, temperature=0.6, keep_alive=-1)
+        
+        vision_model = config.Ashley['Helper']['vision_model']
+        vision_url = config.Ashley['Helper']['vision_base_url']
+        
+        self.vision_model = ChatOllama(base_url=vision_url, model=vision_model)
 
         self.arouse_template = ChatPromptTemplate.from_template(config.Ashley['Helper']['prompt'])
 
         self.digest_template = ChatPromptTemplate.from_template(config.Ashley['Helper']['digest_prompt'])
+
+        self.vision_template = config.Ashley['Helper']['vision_prompt']
         # self.llm = self.model.with_structured_output(AshleyArouse)
         
     async def is_arouse(self, text: str):
@@ -216,6 +231,30 @@ class AshleyAIHelper:
             think, response = DSR1CoTParser(response)
         logger.info(f'AI Digest for "{response}"')
         return response
+
+    async def generate_image_digest(self, img_path: str):
+
+        def prompt_func(data):
+            text = data["text"]
+            image = data["image"]
+
+            image_part = {
+                "type": "image_url",
+                "image_url": f"data:image/jpeg;base64,{image}",
+            }
+
+            text_part = {"type": "text", "text": text}
+
+            content_parts = [image_part, text_part]
+
+            return [HumanMessage(content=content_parts)]
+
+        img_base64 = await convertToBase64(img_path, mode='local')
+        chain = prompt_func | self.vision_model
+        result = chain.invoke({"text": self.vision_template, "image": img_base64})
+        logger.info(f'AI Vision for "{result}"')
+        return result.content
+
 
 '''
 Debug codes.

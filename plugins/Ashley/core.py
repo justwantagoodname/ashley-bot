@@ -1,13 +1,14 @@
 from dataclasses import dataclass
 from email import message
 import random
+from attr import has
 import structlog
 from alicebot import Event, MessageEvent, Plugin
 from alicebot.adapter.cqhttp.message import CQHTTPMessageSegment, CQHTTPMessage
 from langchain_core.messages import HumanMessage, AIMessage
 from plugins.Ashley.ai import AshleyAIGraph, AshleyAIHelper
 from plugins.Ashley.config import AshleyConfig
-from plugins.Ashley.utils import execute_method, fromOneBot, gather_method_with, isAtAll, isAtMe, isGroup, isMessageEvent, isNoticeEvent, isPM, isPokeMe, isPokeNotify
+from plugins.Ashley.utils import execute_method, fromOneBot, gather_method_with, hasImage, isAtAll, isAtMe, isGroup, isMessageEvent, isNoticeEvent, isPM, isPokeMe, isPokeNotify
 import re
 import psutil
 
@@ -46,14 +47,15 @@ class Ashley:
 
         self.group_chat_session = dict() # group_id to uuid
 
+        self.ai_helper = AshleyAIHelper(config=config)
         self.ai = AshleyAIGraph(
             config=self.config,
+            helper=self.ai_helper,
             model=self.config.Ashley['Parameters']['model'],
             prompt=self.config.Ashley['Prompt'],
             base_url=self.config.Ashley['Parameters']['base_url'],
             express_data=self.config.Express 
         )
-        self.ai_helper = AshleyAIHelper(config=config)
         self.group_active_time_beta = float(config.Ashley['group_active_beta'])
         self.group_active_threshold = float(config.Ashley['group_active_threshold'])
         self.group_active_engage = float(config.Ashley['group_active_engage'])
@@ -187,10 +189,27 @@ Misc: BAT: {round(psutil.sensors_battery().percent, 2)}% Temp: {temp}'''
         msg = CQHTTPMessageSegment.image(url)
         await event.reply(msg)
 
+    async def manage_clean(self, event: MessageEvent=None, **kwargs):
+        """清理缓存"""
+        await event.adapter.clean_cache()
+        await event.reply("已清理缓存")
+
     async def update_group_chat_session(self, event: Event):
         group_session = self.get_group_chat_session(event.group_id)
         group_session.update_avg_msg_interval(event.time, self.group_active_time_beta)
         group_session.last_active_event = event
+
+    async def check_sticker(self, event: MessageEvent, group_session: GroupChatSession) -> bool:
+        '''
+            当前消息和上个消息为同一个人且为图片
+        '''
+        if group_session.last_active_msg is None:
+            return False
+        if group_session.last_active_msg.user_id == event.user_id:
+            if hasImage(event):
+                return True
+            
+        return False
 
     async def group_should_answer(self, **kwargs) -> bool:
         """判断群聊消息是否应该回复"""
@@ -206,8 +225,11 @@ Misc: BAT: {round(psutil.sensors_battery().percent, 2)}% Temp: {temp}'''
         elif group_session.avg_msg_interval < self.group_active_threshold \
                 and random.random() < self.group_active_engage: # 群聊在活跃时以一定概率回复
             is_trigger = True
+        elif await self.check_sticker(event, group_session): # TODO 发送图片且是同一个人并且为连续对话
+            logger.info('sticker trigger')
+            is_trigger = True
         elif False: # TODO 群聊在非活跃时以一定概率回复
-            pass
+            is_trigger = True
         elif await self.ai_helper.is_arouse(event.get_plain_text()):  # 使用小模型panduan
             is_trigger = True
 

@@ -8,4 +8,7 @@ pkgs.mkShell {
     python312Packages.pyyaml
     gcc
   ];
+  shellHook = ''
+     source venv/bin/activate
+  '';
 }
